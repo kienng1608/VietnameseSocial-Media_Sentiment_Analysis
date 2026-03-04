@@ -1,124 +1,136 @@
-# Vietnamese Sentiment Analysis API
+# Robust Sentiment Classification of Informal Vietnamese Social Media
 
-**Phân loại cảm xúc bình luận bóng đá tiếng Việt (Ronaldo/Messi)**
+This repository contains the source code, deployment scripts, and API for the paper:
+**"Leveraging Large Language Models and Feature Engineering for Robust Sentiment Classification of Informal Vietnamese Social Media"**
 
-## Tính Năng
+A robust REST API for Vietnamese text sentiment classification built with FastAPI, Hugging Face Sentence Transformers, and Scikit-learn SVM. The system targets informal Facebook comments, specifically focusing on football domains (Lionel Messi and Cristiano Ronaldo), classifying them into Positive (+1), Neutral (0), or Negative (-1).
 
-- 🎯 **POST /api/v1/predict** — nhận text → trả label (-1/0/1) + sentiment
-- ❤️ **GET /api/v1/health** — kiểm tra trạng thái model + VnCoreNLP
-- 📊 **Swagger UI** tại `/docs` — test API trực tiếp trên browser
-- 🐳 **Docker ready** — 1 lệnh deploy toàn bộ
+## Highlights & Paper Contributions
+*   **LLM-Assisted Normalization:** Employs Gemini 2.0 Flash to build mapping dictionaries for "teen code" and abbreviations.
+*   **LLM-Assisted Labeling:** Utilizes Gemini 2.5 Flash for automatic large-scale dataset annotation.
+*   **Named Entity Removal:** Uses `NlpHUST/ner-vietnamese-electra-base` to eliminate irrelevant personal names.
+*   **Advanced Embeddings vs Traditional ML:** Compares BoW, TF-IDF against PhoBERT, E5, and Vietnamese-Document-Embedding (VE).
+*   **Best Model Performance:** The combination of **VE (Vietnamese Embedding) + SVM** with **Oversampling** achieves an accuracy and F1-score of **0.76**, outperforming even fine-tuned PhoBERT models on this highly informal dataset.
 
-## Pipeline
+## Core Pipeline
 
-```
-[Raw Text]
-    ↓ VnCoreNLP word segmentation
+```text
+[Raw Informal Facebook Comment]
+    ↓ NlpHUST/ner-vietnamese-electra-base (PER removal)
+    ↓ LLM-assisted Teen-code Normalization & Cleaning
+    ↓ VnCoreNLP Word Segmentation
 [Preprocessed Text]  
-    ↓ dangvantuan/vietnamese-document-embedding
-[768-dim Embedding]
-    ↓ SVM Classifier
+    ↓ dangvantuan/vietnamese-document-embedding (VE)
+[768-dim Semantic Embedding]
+    ↓ Balanced Support Vector Machine (Oversampled SVM)
 [Label: -1 / 0 / 1]
 ```
 
-## Cấu Trúc Project
+## Features
 
-```
+*   **FastAPI backend** with strict CORS support (configured for `http://localhost,http://localhost:3000` by default).
+*   **Pydantic models** for robust input validation and structured responses.
+*   **Health and system endpoints** for Docker container monitoring.
+*   **Fully Containerized** with multi-stage Docker builds, non-root user execution, and robust health checks.
+
+## Project Structure
+
+```text
 fastapi_docker_compose/
 ├── app/
-│   ├── main.py                 # FastAPI entry point (lifespan, CORS, router)
+│   ├── main.py                 # FastAPI app initialization, lifespan, CORS, router registration
 │   ├── models/
-│   │   └── schemas.py          # Pydantic request/response schemas
+│   │   └── schemas.py          # Pydantic request/response models
 │   ├── routers/
-│   │   └── api.py              # Endpoints: /predict, /health
+│   │   └── api.py              # API endpoints (/predict, /health)
 │   └── services/
-│       ├── preprocessor.py     # VnCoreNLP wrapper + text functions
-│       └── predictor.py        # SentenceTransformer + SVM
-├── scripts/
-│   └── label_data.py           # Labeling tool (Gemini API)
-├── models/                     # Đặt svm_model.pkl ở đây (không commit)
-├── data/                       # Raw/processed data (không commit)
+│       ├── preprocessor.py     # Core logic for cleaning text and loading VnCoreNLP
+│       └── predictor.py        # Core logic for loading models and running predictions
 ├── docker/
-│   ├── Dockerfile              # Multi-stage build
-│   └── docker-compose.yml
-├── requirements.txt
-├── .env.example
-├── .gitignore
-└── .dockerignore
+│   ├── Dockerfile              # Multi-stage Dockerfile adhering to best practices
+│   └── docker-compose.yml      # Compose file linking the API with resources
+├── data/                       # Directory for dataset files (gitignored)
+├── models/                     # Directory for the pre-trained SVM model (gitignored)
+├── scripts/
+│   └── label_data.py           # Data labeling script using the Google Gemini API
+├── .env.example                # Sample environment variables
+├── .dockerignore               # Optimized Docker build context
+├── .gitignore                  # Git exclusions for secrets and models
+├── AVOIDANCE_TABLE.md          # Documentation on how 8 common deployment pitfalls were avoided
+└── requirements.txt            # Pinned Python dependencies
 ```
 
-## Setup Nhanh
+## Requirements
 
-### 1. Chuẩn bị model
-```bash
-# Đặt file svm_model.pkl từ Colab vào thư mục models/
-mkdir -p models
-cp /path/to/svm_model.pkl models/
+*   **Docker & Docker Compose** (Recommended for deployment)
+*   **Python:** 3.11+ (If running locally without Docker)
+*   **Java Runtime (JRE/JDK):** Required for VnCoreNLP if running locally without Docker.
+
+**Key Dependencies (`requirements.txt`):**
+*   `fastapi`, `uvicorn`, `pydantic`
+*   `py_vncorenlp`
+*   `sentence-transformers`, `torch`, `transformers`
+*   `scikit-learn`, `joblib`
+
+
+## API Endpoints
+
+### `GET /api/v1/health`
+**Description:** Health check endpoint used by Docker to ensure the app, embedding model, and VnCoreNLP are fully loaded and operational.
+**Response:**
+```json
+{
+  "status": "ok",
+  "model_loaded": true,
+  "vncore_loaded": true,
+  "version": "1.0.0",
+  "message": null
+}
 ```
 
-### 2. Tạo file .env
-```bash
-cp .env.example .env
-# Mở .env và điền GEMINI_API_KEY (nếu dùng labeling script)
+### `POST /api/v1/predict`
+**Description:** Processes a Vietnamese sentence, applies text cleaning and word segmentation, generates embeddings, and predicts the sentiment.
+**Request Body (`PredictRequest`):**
+```json
+{
+  "text": "Messi đá hay quá, fan thực sự tự hào!"
+}
 ```
-
-### 3. Build & Run
-```bash
-cd docker
-docker-compose up --build
+**Response (`PredictResponse`):**
+```json
+{
+  "text": "Messi đá hay quá, fan thực sự tự hào!",
+  "text_preprocessed": "messi đá hay quá fan thực_sự tự_hào",
+  "label": 1,
+  "sentiment": "Tích cực",
+  "emoji": "😊",
+  "processed_at": "2026-03-04T17:15:23.123Z"
+}
 ```
+**Errors:**
+*   `422 Unprocessable Entity`: Input is empty or exceeds the character limit.
+*   `503 Service Unavailable`: Triggered if the models have not finished loading yet.
 
-### 4. Test API
-```bash
-# Health check
-curl http://localhost:8000/api/v1/health
+## Model Details
 
-# Predict
-curl -X POST http://localhost:8000/api/v1/predict \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Messi đá hay quá, fan thực sự tự hào!"}'
-```
+*   **Tokenizer/Segmentation:** `VnCoreNLP` (Wraps Java processes for accurate Vietnamese word boundary detection).
+*   **Embedding Pipeline:** `sentence-transformers` loading `dangvantuan/vietnamese-document-embedding` (768-dimensional output). Extracted dynamically without backpropagation (`torch.no_grad()`).
+*   **Classifier:** A scikit-learn Support Vector Machine (SVM) pipeline persisted via `joblib`.
+*   **Outputs:**
+    *   `1`: Positive (Tích cực)
+    *   `0`: Neutral (Trung lập)
+    *   `-1`: Negative (Tiêu cực)
 
-### 5. Swagger UI
-Mở browser: http://localhost:8000/docs
+Models are loaded at startup within the FastAPI lifespan context in `app/main.py` and managed via Singletons in `app/services/`.
 
-## Labeling Script
+## Quality Assurance & Best Practices
 
-```bash
-# Label dataset mới bằng Gemini API
-python scripts/label_data.py \
-  --input data/raw_comments.csv \
-  --output data/labeled_data.csv \
-  --text-col text
-```
-
-## Endpoints
-
-| Method | Path | Mô tả |
-|--------|------|-------|
-| `POST` | `/api/v1/predict` | Phân tích cảm xúc 1 câu |
-| `GET`  | `/api/v1/health`  | Health check |
-| `GET`  | `/docs`           | Swagger UI |
-
-## Labels
-
-| Label | Sentiment | Emoji |
-|-------|-----------|-------|
-| `1`   | Tích cực  | 😊    |
-| `0`   | Trung lập | 😶    |
-| `-1`  | Tiêu cực  | 😞    |
-
-## Tránh 8 Lỗi Phổ Biến
-
-Xem chi tiết: [AVOIDANCE_TABLE.md](AVOIDANCE_TABLE.md)
-
-| # | Lỗi | Giải pháp |
-|---|-----|-----------|
-| 1 | Base image `python:latest` | Dùng `python:3.11-slim` |
-| 2 | `.env` commit lên git | `.gitignore` + `.env.example` |
-| 3 | Không có restart policy | `restart: unless-stopped` |
-| 4 | Hardcode secrets | Đọc từ `.env` file |
-| 5 | Không có health check | `HEALTHCHECK` + `healthcheck:` |
-| 6 | Run container với root | `USER appuser` (non-root) |
-| 7 | CORS wildcard `*` | `ALLOWED_ORIGINS` cụ thể |
-| 8 | Floating dependencies | Pinned versions trong `requirements.txt` |
+The repository adheres strictly to deployment best practices, actively preventing 8 common infrastructural errors. Please view `AVOIDANCE_TABLE.md` for full details, which includes:
+1.  Using a pinned `python:3.11-slim` base image.
+2.  Proper `.gitignore` configuration for `.env` files and large model binaries.
+3.  Implementing restart policies inside Docker compose.
+4.  Avoiding hardcoded credentials.
+5.  Implementing robust Docker `HEALTHCHECK`.
+6.  Running containers using a non-root `appuser`.
+7.  Restricting wildcard CORS arrays.
+8.  Pinning all production dependency versions accurately in `requirements.txt`.
