@@ -1,0 +1,19 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.0
+pydantic==2.10.3
+httpx==0.27.2
+python-dotenv==1.0.1
+
+# NLP
+py_vncorenlp==0.1.4
+sentence-transformers==3.4.1
+torch==2.2.2
+transformers==4.47.1
+
+# ML
+scikit-learn==1.5.2
+joblib==1.4.2
+
+# Labeling script
+requests==2.32.3
+pandas==2.2.3

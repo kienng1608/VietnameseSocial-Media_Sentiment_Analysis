@@ -1,0 +1,66 @@
+# ── docker-compose.yml ────────────────────────────────────────────────────────
+# Vietnamese Sentiment Analysis API
+# Services: api (FastAPI + VnCoreNLP + SentenceTransformer + SVM)
+#
+# Cách dùng:
+#   1. Copy .env.example → .env và điền đúng giá trị
+#   2. Đặt file svm_model.pkl vào thư mục models/
+#   3. docker-compose up --build
+
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ..               # context là root project (chứa app/)
+      dockerfile: docker/Dockerfile
+    container_name: sentiment_api
+    restart: unless-stopped     # tránh lỗi #3 (không có restart policy)
+
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+    environment:
+      # App config
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://localhost:3000}
+      - VNCORENLP_DIR=/app/VnCoreNLP
+      - SVM_MODEL_PATH=/app/models/svm_model.pkl
+
+      # Gemini API (dùng cho labeling script)
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    volumes:
+      # Mount SVM model file từ host → container (không bake vào image)
+      # Thay đường dẫn nếu cần
+      - ../models:/app/models:ro
+
+    # Không expose secret thực qua env hardcode — đọc từ .env file
+    env_file:
+      - ../.env
+
+    # Resource limits — tránh container chiếm hết RAM host
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+        reservations:
+          memory: 2G
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s   # Model load có thể mất vài phút
+      retries: 3
+
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+    name: sentiment_network
