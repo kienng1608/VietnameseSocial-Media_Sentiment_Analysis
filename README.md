@@ -1,6 +1,6 @@
 # Robust Sentiment Classification of Informal Vietnamese Social Media
 
-This repository contains the source code, deployment scripts, and API for the paper:
+This repository contains the source code, deployment scripts, and API for my paper:
 **"Leveraging Large Language Models and Feature Engineering for Robust Sentiment Classification of Informal Vietnamese Social Media"**
 
 A robust REST API for Vietnamese text sentiment classification built with FastAPI, Hugging Face Sentence Transformers, and Scikit-learn SVM. The system targets informal Facebook comments, specifically focusing on football domains (Lionel Messi and Cristiano Ronaldo), classifying them into Positive (+1), Neutral (0), or Negative (-1).
